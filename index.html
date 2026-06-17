@@ -128,12 +128,7 @@ footer{margin-top:18px;color:#5b6168;font-size:11px;line-height:1.5;border-top:1
     btn.textContent=on?"✓ Terminé":"✎ Éditer";
     document.querySelectorAll(".se-mine textarea").forEach(function(t){t.disabled=!on;});
   }
-  btn.addEventListener("click",function(){
-    if(editing){ setEditing(false); return; }
-    var c=window.prompt("Code pour éditer :");
-    if(c===null) return;
-    if(c===CODE) setEditing(true); else window.alert("Code incorrect.");
-  });
+  btn.addEventListener("click",function(){ setEditing(!editing); });
 
   function H(extra){ var h={apikey:SUPA_KEY,Authorization:"Bearer "+SUPA_KEY}; if(extra)for(var k in extra)h[k]=extra[k]; return h; }
   function load(){
