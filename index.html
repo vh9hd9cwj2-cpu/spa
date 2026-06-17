@@ -68,4 +68,99 @@ footer{margin-top:18px;color:#5b6168;font-size:11px;line-height:1.5;border-top:1
  window.addEventListener('resize',function(){deck.scrollLeft=cur*deck.clientWidth;});
  cur=0;setActive(0);
 })();
+</script><script>
+(function(){
+  /* ====== Édition des notes + Supabase ====== */
+  var SUPA_URL="https://tjnxhvoddelxvbpivtue.supabase.co";
+  var SUPA_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRqbnhodm9kZGVseHZicGl2dHVlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE3MDcwMzEsImV4cCI6MjA5NzI4MzAzMX0._SQ85rgW58APzDJN4UwCKcOUyzxj3dskqvMxc52kiiw";
+  var CODE="spa2026";            /* <= code pour deverrouiller l'edition (change-le ici) */
+  var TABLE="notes_virages";
+  var LS="spa_notes_v1";
+  var REST=SUPA_URL+"/rest/v1/"+TABLE;
+
+  var local={};
+  try{local=JSON.parse(localStorage.getItem(LS))||{};}catch(e){local={};}
+  function saveLocal(){try{localStorage.setItem(LS,JSON.stringify(local));}catch(e){}}
+  function rec(k){ if(!local[k]) local[k]={note_perso:"",reco_coach:""}; return local[k]; }
+
+  var st=document.createElement("style");
+  st.textContent=
+  ".se-mine{border-top:1px dashed #e2e5ea;margin-top:11px;padding-top:10px;display:flex;flex-direction:column;gap:7px}"+
+  ".se-lab{font-size:9.5px;text-transform:uppercase;letter-spacing:.4px;font-weight:800;display:flex;justify-content:space-between;align-items:center;gap:8px}"+
+  ".se-lab.p{color:#0b5cab}.se-lab.c{color:#1b7f3b}"+
+  ".se-mine textarea{border:1px solid #e2e5ea;border-radius:8px;padding:8px 9px;font:inherit;font-size:13px;color:#1a1a1a;background:#fff;outline:0;resize:vertical;min-height:42px;width:100%}"+
+  ".se-mine textarea:disabled{background:#f6f7f8;color:#444;-webkit-text-fill-color:#444;opacity:1}"+
+  ".se-mine textarea:focus{border-color:#0b5cab;box-shadow:0 0 0 2px #eaf2fb}"+
+  ".se-sv{font-size:10px;font-weight:700}.se-ok{color:#1b7f3b}.se-err{color:#c8102e}.se-wait{color:#5b6168}"+
+  "#seEdit{position:fixed;right:14px;bottom:16px;z-index:60;background:#c8102e;color:#fff;border:0;border-radius:24px;padding:11px 17px;font-weight:800;font-size:13px;box-shadow:0 2px 9px rgba(0,0,0,.22);cursor:pointer}"+
+  "#seEdit.on{background:#1b7f3b}"+
+  "#seSync{position:fixed;left:12px;bottom:18px;z-index:60;font-size:10.5px;font-weight:600;color:#5b6168;background:#fff;border:1px solid #e2e5ea;border-radius:8px;padding:3px 8px}";
+  document.head.appendChild(st);
+
+  var slides=Array.prototype.slice.call(document.querySelectorAll(".slide"));
+  slides.forEach(function(s){
+    var card=s.querySelector(".card")||s;
+    var numEl=s.querySelector(".num");
+    var key=numEl?numEl.textContent.trim():("i"+s.getAttribute("data-i"));
+    var box=document.createElement("div"); box.className="se-mine";
+    box.innerHTML=
+      '<div class="se-lab p">Ma note perso <span class="se-sv" data-sv="'+key+'"></span></div>'+
+      '<textarea data-k="'+key+'" data-f="note_perso" disabled placeholder="Tes corrections au fil du week-end…"></textarea>'+
+      '<div class="se-lab c">Recommandation coach</div>'+
+      '<textarea data-k="'+key+'" data-f="reco_coach" disabled placeholder="Ce que dit le coach…"></textarea>';
+    card.appendChild(box);
+  });
+
+  function fill(){
+    document.querySelectorAll(".se-mine textarea").forEach(function(t){
+      var k=t.getAttribute("data-k"),f=t.getAttribute("data-f");
+      t.value=(local[k]&&local[k][f])||"";
+    });
+  }
+
+  var editing=false;
+  var btn=document.createElement("button"); btn.id="seEdit"; btn.textContent="✎ Éditer";
+  document.body.appendChild(btn);
+  var sync=document.createElement("div"); sync.id="seSync"; sync.textContent="☁ synchro…";
+  document.body.appendChild(sync);
+  function setEditing(on){
+    editing=on; btn.classList.toggle("on",on);
+    btn.textContent=on?"✓ Terminé":"✎ Éditer";
+    document.querySelectorAll(".se-mine textarea").forEach(function(t){t.disabled=!on;});
+  }
+  btn.addEventListener("click",function(){
+    if(editing){ setEditing(false); return; }
+    var c=window.prompt("Code pour éditer :");
+    if(c===null) return;
+    if(c===CODE) setEditing(true); else window.alert("Code incorrect.");
+  });
+
+  function H(extra){ var h={apikey:SUPA_KEY,Authorization:"Bearer "+SUPA_KEY}; if(extra)for(var k in extra)h[k]=extra[k]; return h; }
+  function load(){
+    fetch(REST+"?select=virage,note_perso,reco_coach",{headers:H()})
+    .then(function(r){ if(!r.ok) throw 0; return r.json(); })
+    .then(function(rows){
+      rows.forEach(function(row){ local[row.virage]={note_perso:row.note_perso||"",reco_coach:row.reco_coach||""}; });
+      saveLocal(); fill(); sync.textContent="☁ à jour";
+    })
+    .catch(function(){ fill(); sync.textContent="⚠ hors-ligne (local)"; });
+  }
+  var timers={};
+  function flash(k,cls,txt){ var el=document.querySelector('[data-sv="'+k+'"]'); if(el){ el.className="se-sv "+cls; el.textContent=txt; } }
+  function push(k){
+    var r=rec(k);
+    var body=[{virage:k,note_perso:r.note_perso,reco_coach:r.reco_coach,maj:new Date().toISOString()}];
+    fetch(REST,{method:"POST",headers:H({"Content-Type":"application/json",Prefer:"resolution=merge-duplicates"}),body:JSON.stringify(body)})
+    .then(function(res){ if(!res.ok) throw 0; flash(k,"se-ok","✓ enregistré"); })
+    .catch(function(){ flash(k,"se-err","⚠ non sync (local OK)"); });
+  }
+  document.addEventListener("input",function(e){
+    var t=e.target; if(!t||!t.getAttribute||t.getAttribute("data-f")==null||!t.closest||!t.closest(".se-mine")) return;
+    var k=t.getAttribute("data-k"),f=t.getAttribute("data-f");
+    rec(k)[f]=t.value; saveLocal(); flash(k,"se-wait","…");
+    clearTimeout(timers[k]); timers[k]=setTimeout(function(){push(k);},700);
+  });
+
+  fill(); load();
+})();
 </script></body></html>
